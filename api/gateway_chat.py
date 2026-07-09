@@ -55,16 +55,20 @@ _GATEWAY_CHAT_BACKENDS = {"gateway", "api_server", "api-server"}
 # read timeout ends the turn (surfacing Stop if pressed). It replaces the old flat
 # 600s timeout, under which a half-open gateway (TCP open, zero bytes) pinned the
 # worker for the full 10 minutes and ignored Stop (cancel is only re-checked
-# between SSE lines). 120s is generous for a slow first token / short silent
-# server-side tool call while capping the dead-gateway pin far below 600s; no
-# protocol heartbeat exists, so this is purely timeout-based. Deployments with
-# long fully-silent tool calls can raise ``HERMES_WEBUI_GATEWAY_READ_TIMEOUT``.
+# between SSE lines). We KEEP the 600s default budget: there is no Gateway
+# protocol heartbeat guaranteeing sub-600s progress bytes, so a legitimately
+# long/fully-silent server-side tool call must not be terminated early — reducing
+# the default below 600s would kill currently-working turns (gate finding, #5789).
+# The win here is that a read timeout is now TERMINAL and Stop-honoring (the old
+# flat timeout ignored Stop on a half-open gateway); the budget itself stays 600s
+# for backward compatibility. Deployments that want a tighter dead-gateway cap can
+# lower ``HERMES_WEBUI_GATEWAY_READ_TIMEOUT``.
 _GATEWAY_READ_TIMEOUT_ENV = "HERMES_WEBUI_GATEWAY_READ_TIMEOUT"
-_GATEWAY_READ_TIMEOUT_DEFAULT = 120.0
+_GATEWAY_READ_TIMEOUT_DEFAULT = 600.0
 
 
 def _gateway_read_timeout_secs() -> float:
-    """Total byte-silence budget for gateway SSE reads (default 120s, env-tunable)."""
+    """Total byte-silence budget for gateway SSE reads (default 600s, env-tunable)."""
     raw = os.environ.get(_GATEWAY_READ_TIMEOUT_ENV)
     if raw:
         try:

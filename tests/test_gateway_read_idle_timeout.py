@@ -8,7 +8,7 @@ bytes) blocked each read for the full 600s, so the worker thread was pinned for
 10 minutes and a user's Stop was ignored until then.
 
 The socket now carries a bounded byte-silence budget (``_gateway_read_timeout_secs``,
-default 120s, env-tunable) and iteration goes through ``_iter_sse_lines_cancellable``.
+default 600s, env-tunable) and iteration goes through ``_iter_sse_lines_cancellable``.
 A read timeout is TERMINAL: CPython's ``socket.makefile`` latches
 ``_timeout_occurred`` on the first ``socket.timeout``, so every subsequent read
 raises a bare ``OSError`` and the connection cannot be resumed. The generator
@@ -172,10 +172,10 @@ def test_eof_ends_iteration_cleanly():
 
 class TestReadTimeoutConfig:
 
-    def test_default_is_120s(self, monkeypatch):
+    def test_default_is_600s(self, monkeypatch):
         monkeypatch.delenv("HERMES_WEBUI_GATEWAY_READ_TIMEOUT", raising=False)
-        assert _gateway_read_timeout_secs() == 120.0
-        assert _GATEWAY_READ_TIMEOUT_DEFAULT == 120.0
+        assert _gateway_read_timeout_secs() == 600.0
+        assert _GATEWAY_READ_TIMEOUT_DEFAULT == 600.0
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("HERMES_WEBUI_GATEWAY_READ_TIMEOUT", "300")
@@ -183,12 +183,12 @@ class TestReadTimeoutConfig:
 
     def test_invalid_env_falls_back_to_default(self, monkeypatch):
         monkeypatch.setenv("HERMES_WEBUI_GATEWAY_READ_TIMEOUT", "not-a-number")
-        assert _gateway_read_timeout_secs() == 120.0
+        assert _gateway_read_timeout_secs() == 600.0
 
     def test_non_positive_env_falls_back_to_default(self, monkeypatch):
         monkeypatch.setenv("HERMES_WEBUI_GATEWAY_READ_TIMEOUT", "0")
-        assert _gateway_read_timeout_secs() == 120.0
+        assert _gateway_read_timeout_secs() == 600.0
 
     def test_negative_env_falls_back_to_default(self, monkeypatch):
         monkeypatch.setenv("HERMES_WEBUI_GATEWAY_READ_TIMEOUT", "-5")
-        assert _gateway_read_timeout_secs() == 120.0
+        assert _gateway_read_timeout_secs() == 600.0
