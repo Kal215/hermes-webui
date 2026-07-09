@@ -184,15 +184,16 @@ class RequestDiagnostics:
             self._current_stage_started = now
 
     def _emit_slow(self, prefix: str, record: dict) -> None:
-        payload = f"{prefix} {json.dumps(record, sort_keys=True)}"
+        payload = json.dumps(record, sort_keys=True)
+        log_msg = f"{prefix} %s"
         if self._print_fn is not None:
             try:
-                self._print_fn(payload)
+                self._print_fn(log_msg % payload)
             except Exception:
                 # print_fn is best-effort; never break a request thread.
                 pass
         else:
-            self.logger.warning("%s", payload)
+            self.logger.warning(log_msg, payload)
 
     def finish(self) -> None:
         record = None

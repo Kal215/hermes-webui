@@ -6278,7 +6278,7 @@ def _read_profile_model_config(
     try:
         from api.profiles import get_hermes_home_for_profile
 
-        _profile_name = str(getattr(session, "profile") or "")
+        _profile_name = str(session.profile or "")
         _profile_home = get_hermes_home_for_profile(_profile_name)
         _profile_cfg_path = os.path.join(str(_profile_home), "config.yaml")
         if not os.path.isfile(_profile_cfg_path):
@@ -13840,7 +13840,7 @@ def handle_post(handler, parsed) -> bool:
         if _draft_stages[-1][1] - _draft_t0 > 0.2:
             parts = " ".join(
                 f"{n}={((t - prev[1]) * 1000):.1f}ms"
-                for (n, t), prev in zip(_draft_stages[1:], _draft_stages[:-1])
+                for (n, t), prev in zip(_draft_stages[1:], _draft_stages[:-1], strict=True)
             )
             handler._safe_webui_print(
                 "[SLOW] /api/session/draft total=%.1fms stages: %s" % (
