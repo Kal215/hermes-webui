@@ -61,7 +61,7 @@ def test_composer_captured_and_cleared_before_upload_await():
     wipe_rel = body.index("$('msg').value='';autoResize();", capture_idx)
     assert wipe_rel - capture_idx < 120, "the textarea wipe must sit immediately after the capture"
 
-    upload_idx = body.index("uploaded=await uploadPendingFiles();")
+    upload_idx = body.index("uploaded=await uploadPendingFiles(")
     directive_await_idx = body.index("const _directivePayload = await _pending.promise;")
 
     assert capture_idx < upload_idx, (

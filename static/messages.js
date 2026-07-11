@@ -1566,9 +1566,27 @@ async function send(){
   const _submittedDraftTextForClear=$('msg').value||'';
   $('msg').value='';autoResize();
 
-  setComposerStatus(S.pendingFiles&&S.pendingFiles.length?'Uploading…':'');
+  // #5912 gate CORE fix: snapshot the pending files that belong to THIS send
+  // BEFORE the await, and upload exactly that snapshot. Otherwise a re-entrant /
+  // interrupt-mode send during the upload window inherits the still-live
+  // S.pendingFiles and later re-uploads the first send's attachment. Detach the
+  // snapshot from S.pendingFiles now so files staged AFTER this point belong to
+  // the next send only.
+  const _submittedFiles=[...(S.pendingFiles||[])];
+  const _submittedDraftFilesForClear=_submittedFiles.map(f=>(f&&f.name)||'').filter(Boolean);
+  S.pendingFiles=[];
+  if(typeof renderTray==='function')renderTray();
+
+  // #5912 gate SILENT fix: clear the PERSISTED draft here — alongside the
+  // textarea clear, BEFORE any await — so a new draft typed during the upload
+  // window is not clobbered by a delayed text:'' post. Keep the promise so the
+  // #5472 failed-send restore can chain its re-persist after this clear resolves.
+  let _composerDraftClearPromise=null;
+  if (activeSid && typeof _clearComposerDraft === 'function') _composerDraftClearPromise=_clearComposerDraft(activeSid,_submittedDraftTextForClear,_submittedDraftFilesForClear);
+
+  setComposerStatus(_submittedFiles.length?'Uploading…':'');
   let uploaded=[];
-  try{uploaded=await uploadPendingFiles();}
+  try{uploaded=await uploadPendingFiles({files:_submittedFiles, sessionId:activeSid});}
   catch(e){if(!text){setComposerStatus(`Upload error: ${e.message}`);return;}}
   // Clear the uploading status now that upload is done — if we don't clear here
   // it stays visible for the entire duration of the agent stream, since
@@ -1603,17 +1621,11 @@ async function send(){
     }
   }
   if(!msgText){setComposerStatus('Nothing to send');return;}
-  // Composer textarea + _submittedDraftTextForClear were already captured and
-  // cleared immediately after capture (above, salvage of #4750) to close the
-  // re-entrant double-send race. Only the files snapshot is finalized here.
-  const _submittedDraftFilesForClear=Array.isArray(_failedSendFilesSnapshot)?[..._failedSendFilesSnapshot]:[];
-  // Clear persisted composer draft since message was sent. Capture the promise
-  // so the #5472 failed-send restore can chain its re-persist AFTER this clear
-  // resolves — otherwise the two same-origin POSTs (clear text:'' then restore
-  // text:<draft>) can be reordered under HTTP/2 multiplexing and leave the
-  // server draft empty after a reload. (Opus #5484 NIT.)
-  let _composerDraftClearPromise=null;
-  if (activeSid && typeof _clearComposerDraft === 'function') _composerDraftClearPromise=_clearComposerDraft(activeSid,_submittedDraftTextForClear,_submittedDraftFilesForClear);
+  // Composer textarea + persisted draft were already captured and cleared
+  // immediately after capture (above, salvage of #4750 + #5912 gate fix) to close
+  // the re-entrant double-send race AND avoid clobbering a draft typed during the
+  // upload window. _composerDraftClearPromise / _submittedDraftFilesForClear are
+  // set there; nothing to re-declare here.
   const displayText=_slashDisplayTextOverride||text||(uploaded.length?`Uploaded: ${uploadedNames.join(', ')}`:'(file upload)');
   const userMsg={role:'user',content:displayText,attachments:uploaded.length?uploadedNames:undefined,_ts:Date.now()/1000};
   S.toolCalls=[];  // clear tool calls from previous turn

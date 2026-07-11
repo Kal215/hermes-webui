@@ -74,7 +74,7 @@ def test_send_captures_immutable_snapshot_before_rewrites_and_upload():
         "const _failedSendFilesSnapshot=Array.isArray(S.pendingFiles)?[...S.pendingFiles]:[];"
     )
     moa_idx = MESSAGES_JS.find("text=_moaArgs;")
-    upload_idx = MESSAGES_JS.find("uploaded=await uploadPendingFiles();")
+    upload_idx = MESSAGES_JS.find("uploaded=await uploadPendingFiles(")
     assert snap_idx != -1 and files_idx != -1, "send() must snapshot text + files for #5472"
     assert moa_idx != -1 and upload_idx != -1
     # Snapshot happens before both the /moa rewrite and the upload drain.
@@ -116,7 +116,7 @@ def test_send_still_clears_composer_on_the_happy_path():
     assert "$('msg').value='';autoResize();" in window_after_capture, (
         "the composer textarea wipe must sit immediately after the capture"
     )
-    upload_idx = MESSAGES_JS.index("uploaded=await uploadPendingFiles();")
+    upload_idx = MESSAGES_JS.index("uploaded=await uploadPendingFiles(")
     clear_idx = MESSAGES_JS.index(main_clear)
     # THE FIX: capture+wipe happen before the upload await (closes the race)...
     assert capture_idx < upload_idx, (
@@ -127,12 +127,17 @@ def test_send_still_clears_composer_on_the_happy_path():
     assert capture_idx < clear_idx, (
         "the captured send-time draft text must precede the persisted-draft clear"
     )
-    # The files snapshot is finalized just above the persisted-draft clear.
-    window_before_clear = MESSAGES_JS[clear_idx - 700:clear_idx]
+    # The files snapshot (#5912 gate fix) is taken from S.pendingFiles BEFORE the
+    # upload await and feeds the persisted-draft clear which now runs before the await.
     assert (
-        "const _submittedDraftFilesForClear=Array.isArray(_failedSendFilesSnapshot)?[..._failedSendFilesSnapshot]:[];"
-        in window_before_clear
-    ), "the files snapshot for the persisted-draft clear must precede it"
+        "const _submittedDraftFilesForClear=_submittedFiles.map(f=>(f&&f.name)||'').filter(Boolean);"
+        in MESSAGES_JS
+    ), "the files snapshot for the persisted-draft clear must be captured pre-await"
+    # The persisted-draft clear must run BEFORE the upload await (not after it),
+    # so a draft typed during the upload window is not clobbered.
+    assert clear_idx < upload_idx, (
+        "the persisted-draft clear must precede the uploadPendingFiles() await (#5912)"
+    )
 
 
 def test_restore_persist_chains_after_the_clear_promise():
